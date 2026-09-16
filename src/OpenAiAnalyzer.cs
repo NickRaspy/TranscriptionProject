@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace TranscriptMvp;
 
-public sealed class OpenAiAnalyzer
+public sealed class OpenAiAnalyzer(HttpClient http, string key, string baseUrl, string model)
 {
     private const string SystemInstruction = """
         Ты анализируешь разговор интегратора Saby с B2B-клиентом. Используй только транскрипт и предоставленный общий контекст. Не придумывай участников, сроки, договорённости, суммы или свойства продукта. Отличай просьбу, предложение, отказ и подтверждённую договорённость. Не называй действие согласованным, пока другая сторона его не подтвердила. Явно отмечай отсутствующие и неоднозначные данные. Сохраняй реальные возражения клиента. Ошибки менеджера оценивай только по конкретным репликам. Для каждого существенного вывода добавь короткую точную цитату в evidence. Ответь только валидным JSON без markdown и дополнительного текста.
@@ -13,18 +13,9 @@ public sealed class OpenAiAnalyzer
         """;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private readonly HttpClient _http;
-    private readonly string _key;
-    private readonly string _baseUrl;
-    private readonly string _model;
-
-    public OpenAiAnalyzer(HttpClient http, string key, string baseUrl, string model)
-    {
-        _http = http;
-        _key = !string.IsNullOrWhiteSpace(key) ? key : throw new ArgumentException("API key is empty.", nameof(key));
-        _baseUrl = !string.IsNullOrWhiteSpace(baseUrl) ? baseUrl.TrimEnd('/') : throw new ArgumentException("API base URL is empty.", nameof(baseUrl));
-        _model = !string.IsNullOrWhiteSpace(model) ? model : throw new ArgumentException("Model is empty.", nameof(model));
-    }
+    private readonly string _key = !string.IsNullOrWhiteSpace(key) ? key : throw new ArgumentException("API key is empty.", nameof(key));
+    private readonly string _baseUrl = !string.IsNullOrWhiteSpace(baseUrl) ? baseUrl.TrimEnd('/') : throw new ArgumentException("API base URL is empty.", nameof(baseUrl));
+    private readonly string _model = !string.IsNullOrWhiteSpace(model) ? model : throw new ArgumentException("Model is empty.", nameof(model));
 
     public async Task<ConversationResult> AnalyzeAsync(string id, string source)
     {
@@ -43,7 +34,7 @@ public sealed class OpenAiAnalyzer
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _key);
         request.Content = new StringContent(JsonSerializer.Serialize(payload, Json), Encoding.UTF8, "application/json");
 
-        using var response = await _http.SendAsync(request);
+        using var response = await http.SendAsync(request);
         var body = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"API request failed with HTTP {(int)response.StatusCode}.");
@@ -52,8 +43,6 @@ public sealed class OpenAiAnalyzer
         var content = envelope.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
         var result = JsonSerializer.Deserialize<ConversationResult>(content ?? "", Json)
             ?? throw new InvalidDataException($"Empty API result for {id}.");
-        if (result.TranscriptId != id)
-            throw new InvalidDataException($"API returned wrong transcript ID for {id}.");
-        return result;
+        return result.TranscriptId != id ? throw new InvalidDataException($"API returned wrong transcript ID for {id}.") : result;
     }
 }

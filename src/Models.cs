@@ -25,15 +25,15 @@ public sealed class ConversationResult
 
 public sealed class AgreedAction
 {
-    public required string Action { get; set; }
-    public required string Responsible { get; set; }
+    public required string Action { get; init; }
+    public required string Responsible { get; init; }
     public string? Date { get; set; }
-    public required string DateText { get; set; }
-    public required bool DateIsAmbiguous { get; set; }
+    public required string DateText { get; init; }
+    public required bool DateIsAmbiguous { get; init; }
 }
 
 public sealed class EvidenceItem
 {
-    public required string Claim { get; set; }
+    public required string Claim { get; init; }
     public required string Quote { get; set; }
 }

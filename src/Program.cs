@@ -79,7 +79,8 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("OPENAI_API_KEY is absent. Run with --demo for the supplied case materials.");
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+        using var http = new HttpClient();
+        http.Timeout = TimeSpan.FromSeconds(120);
         var analyzer = new OpenAiAnalyzer(
             http,
             key,

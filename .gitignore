@@ -1,0 +1,8 @@
+.appdata/
+.dotnet_home/
+.idea/
+*.DotSettings.user
+src/bin/
+src/obj/
+tests/bin/
+tests/obj/

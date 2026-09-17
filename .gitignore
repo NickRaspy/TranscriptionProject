@@ -1,7 +1,7 @@
 .appdata/
+.env
 .dotnet_home/
 .idea/
-gemini-output/
 *.DotSettings.user
 src/bin/
 src/obj/

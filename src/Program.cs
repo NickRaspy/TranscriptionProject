@@ -111,7 +111,7 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("GEMINI_API_KEY is absent. Set it before running --gemini.");
 
-        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? "gemini-2.5-flash";
+        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? "gemini-3.5-flash";
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
         var analyzer = new GeminiAnalyzer(http, key, model);
         var batch = new ResultBatch
@@ -123,7 +123,27 @@ internal static class Program
         foreach (var (id, source) in transcripts.OrderBy(item => item.Key, StringComparer.Ordinal))
         {
             Console.WriteLine($"Analyzing transcript {id} with Gemini...");
-            batch.Conversations.Add(await analyzer.AnalyzeAsync(id, source));
+            string? correction = null;
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                try
+                {
+                    var result = await analyzer.AnalyzeAsync(id, source, correction);
+                    ResultValidator.Validate(new ResultBatch
+                    {
+                        Mode = batch.Mode,
+                        GeneratedAt = batch.GeneratedAt,
+                        Conversations = [result]
+                    }, new Dictionary<string, string> { [id] = source });
+                    batch.Conversations.Add(result);
+                    break;
+                }
+                catch (Exception ex) when (attempt == 0 && ex is InvalidDataException or JsonException)
+                {
+                    correction = ex.Message;
+                    Console.WriteLine($"Gemini result for {id} failed validation; requesting a correction...");
+                }
+            }
         }
         return batch;
     }

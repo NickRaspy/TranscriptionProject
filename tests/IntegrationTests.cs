@@ -97,6 +97,8 @@ public sealed class IntegrationTests
             Assert.That(handler.RequestUri, Is.EqualTo("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"));
             Assert.That(handler.GeminiKey, Is.EqualTo("test-key"));
             Assert.That(requestJson.RootElement.GetProperty("generationConfig").GetProperty("responseMimeType").GetString(), Is.EqualTo("application/json"));
+            var schema = requestJson.RootElement.GetProperty("generationConfig").GetProperty("responseSchema");
+            Assert.That(schema.GetProperty("properties").GetProperty("transcriptId").GetProperty("type").GetString(), Is.EqualTo("STRING"));
             Assert.That(requestJson.RootElement.GetProperty("contents")[0].GetProperty("parts")[0].GetProperty("text").GetString(), Does.Contain("Пример разговора"));
         });
     }
@@ -109,6 +111,26 @@ public sealed class IntegrationTests
         var analyzer = new GeminiAnalyzer(http, "test-key", "gemini-2.5-flash");
 
         Assert.ThrowsAsync<InvalidDataException>(async () => await analyzer.AnalyzeAsync("case-1", "source"));
+    }
+
+    [Test]
+    public async Task GeminiClientRemovesUnverifiableTrailingEllipsis()
+    {
+        const string source = "Пожалуйста, не звоните в магазины без меня - прошлый подрядчик напугал продавцов словами о замене.";
+        var conversation = SampleConversation("case-1");
+        conversation.Evidence[0].Quote = "Пожалуйста, не звоните в магазины без меня - прошлый подрядчик напугал продавцов...";
+        var content = JsonSerializer.Serialize(conversation, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var envelope = JsonSerializer.Serialize(new
+        {
+            candidates = new[] { new { finishReason = "STOP", content = new { parts = new[] { new { text = content } } } } }
+        });
+        using var handler = new StubHandler(HttpStatusCode.OK, envelope);
+        using var http = new HttpClient(handler);
+        var analyzer = new GeminiAnalyzer(http, "test-key", "gemini-3.5-flash");
+
+        var result = await analyzer.AnalyzeAsync("case-1", source);
+
+        Assert.That(result.Evidence[0].Quote, Is.EqualTo("Пожалуйста, не звоните в магазины без меня - прошлый подрядчик напугал продавцов"));
     }
 
     private static ConversationResult SampleConversation(string id) => new()

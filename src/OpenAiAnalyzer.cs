@@ -6,12 +6,6 @@ namespace TranscriptMvp;
 
 public sealed class OpenAiAnalyzer(HttpClient http, string key, string baseUrl, string model)
 {
-    private const string SystemInstruction = """
-        Ты анализируешь разговор интегратора Saby с B2B-клиентом. Используй только транскрипт и предоставленный общий контекст. Не придумывай участников, сроки, договорённости, суммы или свойства продукта. Отличай просьбу, предложение, отказ и подтверждённую договорённость. Не называй действие согласованным, пока другая сторона его не подтвердила. Явно отмечай отсутствующие и неоднозначные данные. Сохраняй реальные возражения клиента. Ошибки менеджера оценивай только по конкретным репликам. Для каждого существенного вывода добавь короткую точную цитату в evidence. Ответь только валидным JSON без markdown и дополнительного текста.
-        Правила дат: разрешай относительные сроки от даты разговора, сверяй день недели; точный день указывай лишь если он однозначен. Для Екатеринбурга используй UTC+05:00. Если назван месяц или «после двадцатого января», date=null, dateIsAmbiguous=true, исходная фраза в dateText. Если действий несколько, nextStep — ближайшее согласованное действие, остальные в additionalAgreedActions. Не записывай условное предложение как безусловное обязательство.
-        JSON-объект должен содержать transcriptId, conversationDate (YYYY-MM-DD), client, outcome, nextStep, additionalAgreedActions, clientNeeds, risks, managerMistakes, managerAttention, missingOrAmbiguousInformation, evidence. У каждого действия поля action, responsible, date (ISO 8601 или null), dateText, dateIsAmbiguous. evidence — массив объектов claim и quote. Все массивы обязательны, даже если пустые.
-        """;
-
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly string _key = !string.IsNullOrWhiteSpace(key) ? key : throw new ArgumentException("API key is empty.", nameof(key));
     private readonly string _baseUrl = !string.IsNullOrWhiteSpace(baseUrl) ? baseUrl.TrimEnd('/') : throw new ArgumentException("API base URL is empty.", nameof(baseUrl));
@@ -26,8 +20,8 @@ public sealed class OpenAiAnalyzer(HttpClient http, string key, string baseUrl, 
             response_format = new { type = "json_object" },
             messages = new object[]
             {
-                new { role = "system", content = SystemInstruction },
-                new { role = "user", content = $"Общий контекст: интегратор внедряет Saby (ЭДО, учёт, CRM, маркировка и другие модули). ID транскрипта: {id}.\n\n{source}" }
+                new { role = "system", content = AnalysisPrompt.SystemInstruction },
+                new { role = "user", content = AnalysisPrompt.UserMessage(id, source) }
             }
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");

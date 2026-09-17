@@ -42,7 +42,9 @@ internal static class Program
             var transcripts = files.ToDictionary(path => Path.GetFileNameWithoutExtension(path)!, File.ReadAllText);
             var batch = options.Demo
                 ? await LoadDemoAsync(root, files)
-                : await AnalyzeAsync(transcripts);
+                : options.Gemini
+                    ? await AnalyzeGeminiAsync(transcripts)
+                    : await AnalyzeOpenAiAsync(transcripts);
 
             batch.GeneratedAt = DateTimeOffset.UtcNow.ToString("O");
             ResultValidator.Validate(batch, transcripts);
@@ -76,7 +78,7 @@ internal static class Program
         return batch;
     }
 
-    private static async Task<ResultBatch> AnalyzeAsync(Dictionary<string, string> transcripts)
+    private static async Task<ResultBatch> AnalyzeOpenAiAsync(Dictionary<string, string> transcripts)
     {
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -98,6 +100,29 @@ internal static class Program
         foreach (var (id, source) in transcripts.OrderBy(item => item.Key, StringComparer.Ordinal))
         {
             Console.WriteLine($"Analyzing transcript {id}...");
+            batch.Conversations.Add(await analyzer.AnalyzeAsync(id, source));
+        }
+        return batch;
+    }
+
+    private static async Task<ResultBatch> AnalyzeGeminiAsync(Dictionary<string, string> transcripts)
+    {
+        var key = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("GEMINI_API_KEY is absent. Set it before running --gemini.");
+
+        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? "gemini-2.5-flash";
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+        var analyzer = new GeminiAnalyzer(http, key, model);
+        var batch = new ResultBatch
+        {
+            Mode = $"gemini ({model})",
+            GeneratedAt = DateTimeOffset.UtcNow.ToString("O"),
+            Conversations = []
+        };
+        foreach (var (id, source) in transcripts.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"Analyzing transcript {id} with Gemini...");
             batch.Conversations.Add(await analyzer.AnalyzeAsync(id, source));
         }
         return batch;

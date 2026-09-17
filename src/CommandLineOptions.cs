@@ -1,12 +1,13 @@
 namespace TranscriptMvp;
 
-public sealed record CommandLineOptions(bool Demo, string InputPath, string OutputPath, bool Help)
+public sealed record CommandLineOptions(bool Demo, bool Gemini, string InputPath, string OutputPath, bool Help)
 {
-    public const string Usage = "Usage: dotnet run --project src -- [--demo] [--input FILE_OR_DIRECTORY] [--output DIRECTORY]";
+    public const string Usage = "Usage: dotnet run --project src -- [--demo | --gemini] [--input FILE_OR_DIRECTORY] [--output DIRECTORY]";
 
     public static CommandLineOptions Parse(string[] args, string root)
     {
         var demo = false;
+        var gemini = false;
         var help = false;
         string? input = null;
         string? output = null;
@@ -15,7 +16,7 @@ public sealed record CommandLineOptions(bool Demo, string InputPath, string Outp
         for (var i = 0; i < args.Length; i++)
         {
             var option = args[i];
-            if (option is not ("--demo" or "--help" or "-h" or "--input" or "--output"))
+            if (option is not ("--demo" or "--gemini" or "--help" or "-h" or "--input" or "--output"))
                 throw new ArgumentException($"Unknown argument: {option}. {Usage}");
             if (!seen.Add(option)) throw new ArgumentException($"Repeated argument: {option}.");
 
@@ -23,6 +24,9 @@ public sealed record CommandLineOptions(bool Demo, string InputPath, string Outp
             {
                 case "--demo":
                     demo = true;
+                    break;
+                case "--gemini":
+                    gemini = true;
                     break;
                 case "--help" or "-h":
                     help = true;
@@ -36,8 +40,11 @@ public sealed record CommandLineOptions(bool Demo, string InputPath, string Outp
             }
         }
 
+        if (demo && gemini) throw new ArgumentException("--demo and --gemini cannot be used together.");
+
         return new CommandLineOptions(
             demo,
+            gemini,
             Path.GetFullPath(input ?? Path.Combine(root, "data", "transcripts")),
             Path.GetFullPath(output ?? root),
             help);
